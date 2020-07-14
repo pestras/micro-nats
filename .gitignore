@@ -1,0 +1,10 @@
+.vscode
+node_modules
+npm-debug.log
+*.js
+*.js.map
+*.d.ts
+test
+test.*
+TODO.md
+package-lock.json
