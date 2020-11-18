@@ -1,6 +1,6 @@
 {
   "name": "@pestras/micro-nats",
-  "version": "0.1,0",
+  "version": "0.1.0",
   "description": "pestras microservice plugin for nats messaging server support",
   "main": "index.js",
   "types": "index.ts",
