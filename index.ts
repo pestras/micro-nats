@@ -10,7 +10,7 @@ export interface NatsEvents {
 }
 
 export function NATS_HOOK() {
-  return () => {};
+  return () => { };
 }
 
 /**
@@ -23,10 +23,15 @@ export interface SubjectConfig {
   options?: Nats.SubscriptionOptions;
 }
 
+export interface SubjectFullConfig extends SubjectConfig {
+  key?: string;
+  service?: any;
+}
+
 /**
  * Nats subjects repo that will hold all defined subjects
  */
-let serviceSubjects: { [key: string]: SubjectConfig & { key: string; } } = {};
+let serviceSubjects: { [key: string]: SubjectFullConfig } = {};
 
 /**
  * Nats subject decorator
@@ -36,6 +41,7 @@ let serviceSubjects: { [key: string]: SubjectConfig & { key: string; } } = {};
 export function SUBJECT(subject: string, config: SubjectConfig = {}) {
   return (target: any, key: string) => {
     serviceSubjects[subject] = {
+      service: target.constructor,
       options: config.options || {},
       hooks: config.hooks || [],
       dataQuota: config.dataQuota || 1024 * 100,
@@ -65,6 +71,10 @@ export class MicroNats extends MicroPlugin {
       if (typeof Micro.service.onNatsConnected === "function")
         Micro.service.onNatsConnected(this._client);
 
+      for (let service of Micro.subServices)
+        if (typeof service.onNatsConnected === "function")
+          service.onNatsConnected(this._client);
+
     } catch (error) {
       Micro.logger.error(error);
       throw error;
@@ -72,6 +82,7 @@ export class MicroNats extends MicroPlugin {
 
     for (let subject in serviceSubjects) {
       let subjectConf = serviceSubjects[subject];
+      let currentService = Micro.getCurrentService(subjectConf.service) || Micro.service;
 
       if (typeof Micro.service[subjectConf.key] !== "function") continue;
 
@@ -93,10 +104,10 @@ export class MicroNats extends MicroPlugin {
             for (let hook of subjectConf.hooks) {
               currHook = hook;
 
-              if (Micro.service[hook] === undefined) return Micro.logger.warn(`Hook not found: ${hook}!`);
-              else if (typeof Micro.service[hook] !== 'function') return Micro.logger.warn(`invalid hook type: ${hook}!`);
+              if (currentService[hook] === undefined && Micro.service[hook] === undefined) return Micro.logger.warn(`Hook not found: ${hook}!`);
+              else if (typeof currentService[hook] !== 'function' && typeof Micro.service[hook] !== 'function') return Micro.logger.warn(`invalid hook type: ${hook}!`);
 
-              let ret = Micro.service[hook](this._client, msg, subject);
+              let ret = currentService[hook] ? currentService[hook](this._client, msg, subjectConf.key) : Micro.service[hook](this._client, msg, subjectConf.key);
               if (ret) {
                 if (typeof ret.then === "function") {
                   let passed = await ret;
@@ -107,15 +118,15 @@ export class MicroNats extends MicroPlugin {
               } else return Micro.logger.info(`subject ${msg.subject} ended from hook: ${hook}`);
             }
           } catch (e) {
-            if (msg.reply) this,this._client.publish(msg.reply, { error: { msg: 'hook unhandled error' + currHook } });
+            if (msg.reply) this, this._client.publish(msg.reply, { error: { msg: 'hook unhandled error' + currHook } });
             return Micro.logger.error(e);
           }
         }
 
         try {
-          let ret = Micro.service[subjectConf.key](this._client, msg);
+          let ret = currentService[subjectConf.key](this._client, msg);
           if (ret && typeof ret.then === "function") await ret;
-          Micro.logger.info(`subject ${msg.subject} ended`);     
+          Micro.logger.info(`subject ${msg.subject} ended`);
         } catch (e) { Micro.logger.error(e, { subject: { name: subject, msg }, method: subject }); }
 
       }, subjectConf.options);

@@ -52,10 +52,7 @@ import { Client, Payload} from 'ts-nats';
 
 Micro.plugin(new MicroNats());
 
-@SERVICE({
-  version: 1,
-  workers: 3
-})
+@SERVICE({ workers: 3 })
 class Email {
 
   // hooks works with subjects as well
@@ -96,9 +93,7 @@ Micro.plugin(new MicroNats());
 
 interface MsgInput { id: string; email: string }
 
-@SERVICE({
-  version: 1
-})
+@SERVICE()
 class Email {
 
   @SUBJECT('emails.new')
@@ -109,7 +104,75 @@ class Email {
 }
 ```
 
-## Nats Events
+# Sub Services
+
+```ts
+// comments.service.ts
+import { SUBJECT, NATS_HOOK, NatsEvents } from '@pestras/micro-nats';
+import { Client, Payload} from 'ts-nats';
+
+export class Comments implements NatsEvents {
+
+  onNatsConnected(client: Client) {
+    // ...
+  }
+  
+  @NATS_HOOK()
+  validate(client: Client, msg: NatsMsg, handlerName: string) { return true }
+  
+  @SUBJECT('newComment', {
+    // auth hook from the main service
+    // validate hook from the local service (sub service)
+    hooks: ['auth', 'validate']
+  })
+  create(client: Client, msg: NatsMsg) {
+    
+  }
+}
+```
+
+```ts
+// main.ts
+import { Micro, SERVICE } from '@pestras/micro';
+import { SUBJECT, NATS_HOOK } from '@pestras/micro-nats';
+import { Client, Payload} from 'ts-nats';
+
+Micro.plugin(new MicroRouter());
+
+@SERVICE()
+class Articles {
+
+  onInit() {    
+    Micro.store.someSharedValue = "shared value";
+  }
+
+  @NATS_HOOK()
+  async auth(client: Client, msg: NatsMsg, handlerName: string) {
+    return true;
+  }
+
+  @NATS_HOOK()
+  validate(client: Client, msg: NatsMsg, handlerName: string) {
+    return true;
+  }
+
+  @SUBJECT('newArticle', {
+    // both hooks from the main service
+    hooks: ['auth', 'validate']
+  })
+  create(client: Client, msg: NatsMsg) {
+    
+  }
+}
+
+// pass sub services as an array to the second argument of Micro.start method
+Micro.start(Articles, [Comments]);
+```
+
+* Local hooks has the priority over main service hooks.
+* Subservices have their own lifecycle events.
+
+## lifecycle Events
 
 ### onNatsConnected
 
@@ -124,9 +187,7 @@ Micro.plugin(new MicroNats());
 
 interface MsgInput { id: string; email: string }
 
-@SERVICE({
-  version: 1
-})
+@SERVICE()
 class Email implements NatsEvents {
 
   onNatsConnected(client: Client) {
