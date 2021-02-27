@@ -54,6 +54,7 @@ export function SUBJECT(subject: string, config: SubjectConfig = {}) {
 export class MicroNats extends MicroPlugin {
   private _subs = new Map<string, Nats.Subscription>();
   private _client: Nats.Client;
+  healthy = true;
 
   constructor(private _conf: string | number | Nats.NatsConnectionOptions = "localhost:4222") {
     super();
@@ -133,5 +134,8 @@ export class MicroNats extends MicroPlugin {
 
       this._subs.set(subject, sub);
     }
+
+    this.ready = true;
+    this.live = true;
   }
 }
