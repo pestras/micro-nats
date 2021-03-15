@@ -21,6 +21,7 @@ export interface SubjectConfig {
   dataQuota?: number;
   payload?: Nats.Payload;
   options?: Nats.SubscriptionOptions;
+  meta?: any;
 }
 
 export interface SubjectFullConfig extends SubjectConfig {
@@ -108,7 +109,7 @@ export class MicroNats extends MicroPlugin {
               if (currentService[hook] === undefined && Micro.service[hook] === undefined) return Micro.logger.warn(`Hook not found: ${hook}!`);
               else if (typeof currentService[hook] !== 'function' && typeof Micro.service[hook] !== 'function') return Micro.logger.warn(`invalid hook type: ${hook}!`);
 
-              let ret = currentService[hook] ? currentService[hook](this._client, msg, subjectConf.key) : Micro.service[hook](this._client, msg, subjectConf.key);
+              let ret = currentService[hook] ? currentService[hook](this._client, msg, subjectConf.key, subjectConf.meta) : Micro.service[hook](this._client, msg, subjectConf.key, subjectConf.meta);
               if (ret) {
                 if (typeof ret.then === "function") {
                   let passed = await ret;
@@ -125,7 +126,7 @@ export class MicroNats extends MicroPlugin {
         }
 
         try {
-          let ret = currentService[subjectConf.key](this._client, msg);
+          let ret = currentService[subjectConf.key](this._client, msg, subjectConf.meta);
           if (ret && typeof ret.then === "function") await ret;
           Micro.logger.info(`subject ${msg.subject} ended`);
         } catch (e) { Micro.logger.error(e, { subject: { name: subject, msg }, method: subject }); }

@@ -44,6 +44,7 @@ hooks | string[] | [] | hooks methods that should be called before the route han
 dataQuota | number | 1024 * 100 | Subject msg data size limit
 payload | Nats.Payload | Payload.JSON | see [Nats Docs](https://docs.nats.io/)
 options | Nats.SubscriptionOptions | null | see [Nats Docs](https://docs.nats.io/)
+meta | any | extra details that will be passed to the handler, useful for multiple subjects
 
 ```ts
 import { SERVICE, Micro } from '@pestras/micro';
@@ -96,10 +97,11 @@ interface MsgInput { id: string; email: string }
 @SERVICE()
 class Email {
 
-  @SUBJECT('emails.new')
-  @SUBJECT('emails.reactivate')
-  sendActivataionEmail(client: Client, msg: NatsMsg<MsgInput>) {
+  @SUBJECT('emails.new', { meta: { template: "newEmail" } })
+  @SUBJECT('emails.reactivate', { meta: { template: "reactivateEmail" } })
+  sendActivataionEmail(client: Client, msg: NatsMsg<MsgInput>, meta: any) {
     // send email
+    let emailTemplate = meta.template;
   }
 }
 ```
