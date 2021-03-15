@@ -28,9 +28,9 @@ class test {}
 Micro.start(Test);
 ```
 
-**MicroRouter** class accepts a single optional argument **connection**.
+**MicroNats** class accepts a single optional argument **connection**.
 
-Name        | Type     | Defualt         | Description
+Name        | Type     | Default         | Description
 ----        | -----    | ------          | -----
 connection  | string \| number \| NatsConnectionOptions | 'localhost:42222' | see [Nats Docs](https://docs.nats.io/)
 
@@ -48,17 +48,14 @@ meta | any | extra details that will be passed to the handler, useful for multip
 
 ```ts
 import { SERVICE, Micro } from '@pestras/micro';
-import { SUBJECT, NATS_HOOK, NatsMsg } from '@pestras/micro-nats';
+import { SUBJECT, NatsMsg } from '@pestras/micro-nats';
 import { Client, Payload} from 'ts-nats';
 
 Micro.plugin(new MicroNats());
 
 @SERVICE({ workers: 3 })
 class Email {
-
-  // hooks works with subjects as well
-  // arguments are swaped with (nats: Nats.Client, msg: NatsMsg, handlerName: string - name of the subject handler method that called the hook)
-  @NATS_HOOK()
+  
   async auth(nats: Client, msg: NatsMsg, handlerName: string) {
     // if hook failed its purpose should check for msg reply if exists and return false
     if (msg.reply) {
@@ -110,7 +107,7 @@ class Email {
 
 ```ts
 // comments.service.ts
-import { SUBJECT, NATS_HOOK, NatsEvents } from '@pestras/micro-nats';
+import { SUBJECT, NatsEvents } from '@pestras/micro-nats';
 import { Client, Payload} from 'ts-nats';
 
 export class Comments implements NatsEvents {
@@ -119,7 +116,6 @@ export class Comments implements NatsEvents {
     // ...
   }
   
-  @NATS_HOOK()
   validate(client: Client, msg: NatsMsg, handlerName: string) { return true }
   
   @SUBJECT('newComment', {
@@ -139,7 +135,7 @@ import { Micro, SERVICE } from '@pestras/micro';
 import { SUBJECT, NATS_HOOK } from '@pestras/micro-nats';
 import { Client, Payload} from 'ts-nats';
 
-Micro.plugin(new MicroRouter());
+Micro.plugin(new MicroNats());
 
 @SERVICE()
 class Articles {
@@ -147,13 +143,11 @@ class Articles {
   onInit() {    
     Micro.store.someSharedValue = "shared value";
   }
-
-  @NATS_HOOK()
+  
   async auth(client: Client, msg: NatsMsg, handlerName: string) {
     return true;
   }
-
-  @NATS_HOOK()
+  
   validate(client: Client, msg: NatsMsg, handlerName: string) {
     return true;
   }

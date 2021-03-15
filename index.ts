@@ -9,10 +9,6 @@ export interface NatsEvents {
   onNatsConnected?: (client?: Nats.Client) => void;
 }
 
-export function NATS_HOOK() {
-  return () => { };
-}
-
 /**
  * Nats Subject config interface
  */
