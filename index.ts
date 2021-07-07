@@ -61,22 +61,16 @@ export class MicroNats extends MicroPlugin {
   get subs() { return this._subs; }
 
   async init() {
-    try {
-      Micro.logger.info('initializing nats server connection');
-      this._client = await Nats.connect(this._conf);
-      Micro.logger.info('connected to nats server successfully');
+    Micro.logger.info('initializing nats server connection');
+    this._client = await Nats.connect(this._conf);
+    Micro.logger.info('connected to nats server successfully');
 
-      if (typeof Micro.service.onNatsConnected === "function")
-        Micro.service.onNatsConnected(this._client);
+    if (typeof Micro.service.onNatsConnected === "function")
+      Micro.service.onNatsConnected(this._client);
 
-      for (let service of Micro.subServices)
-        if (typeof service.onNatsConnected === "function")
-          service.onNatsConnected(this._client);
-
-    } catch (error) {
-      Micro.logger.error(error);
-      throw error;
-    }
+    for (let service of Micro.subServices)
+      if (typeof service.onNatsConnected === "function")
+        service.onNatsConnected(this._client);
 
     for (let subject in serviceSubjects) {
       let subjectConf = serviceSubjects[subject];
@@ -88,7 +82,7 @@ export class MicroNats extends MicroPlugin {
       let sub = await this._client.subscribe(subject, async (err, msg) => {
         Micro.logger.info(`subject called: ${subject}`);
 
-        if (err) return Micro.logger.error(err, { subject: subject, method: subject });
+        if (err) return Micro.logger.error(err, `subject: ${subject}, method: ${subjectConf.key}`);
 
         if (subjectConf.dataQuota && subjectConf.dataQuota < msg.size) {
           if (msg.reply) this._client.publish(msg.reply, 'msg body quota exceeded');
@@ -125,7 +119,7 @@ export class MicroNats extends MicroPlugin {
           let ret = currentService[subjectConf.key](this._client, msg, subjectConf.meta);
           if (ret && typeof ret.then === "function") await ret;
           Micro.logger.info(`subject ${msg.subject} ended`);
-        } catch (e) { Micro.logger.error(e, { subject: { name: subject, msg }, method: subject }); }
+        } catch (e) { Micro.logger.error(e, `subject: ${subject}, method: ${subjectConf.key}`); }
 
       }, subjectConf.options);
 
