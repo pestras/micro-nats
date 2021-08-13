@@ -63,8 +63,6 @@ export function SUBJECT(subject: string, config: SubjectConfig = {}) {
   };
 }
 
-connect()
-
 export class MicroNats extends MicroPlugin {
   private _subs = new Map<string, Subscription>();
   private _client: NatsConnection;
@@ -76,6 +74,10 @@ export class MicroNats extends MicroPlugin {
 
   get client() { return this._client; }
   get subs() { return this._subs; }
+
+  onExit() {
+    !!this._client && this._client.drain().then(() => this.client.close()).catch(() => this.client.close());
+  }
 
   async init() {
     Micro.logger.info('initializing nats server connection');
