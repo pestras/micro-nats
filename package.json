@@ -1,6 +1,6 @@
 {
   "name": "@pestras/micro-nats",
-  "version": "1.0.5",
+  "version": "1.1.0",
   "description": "pestras microservice plugin for nats messaging server support",
   "main": "index.js",
   "types": "index.ts",
@@ -35,6 +35,6 @@
   },
   "dependencies": {
     "@pestras/toolbox": "^1.1.16",
-    "ts-nats": "^1.2.15"
+    "nats": "^2.1.0"
   }
 }

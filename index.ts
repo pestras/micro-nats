@@ -1,12 +1,29 @@
 import { Micro, MicroPlugin } from '@pestras/micro';
-import * as Nats from 'ts-nats';
+import { connect, ConnectionOptions, NatsConnection, Msg, JSONCodec, SubscriptionOptions, Subscription, MsgHdrs, PublishOptions } from 'nats';
 
-export interface NatsMsg<T = any> extends Nats.Msg {
-  data?: T;
+export class NatsMsg<T = any> implements Msg {
+  public readonly jc = JSONCodec<T>();
+  readonly sid: number;
+  readonly subject: string;
+  readonly reply: string;
+  readonly data: Uint8Array;
+  readonly headers: MsgHdrs;
+  readonly respond: (data?: Uint8Array, opts?: PublishOptions) => boolean;
+  json: T;
+
+  constructor(msg: Msg) {
+    this.sid = msg.sid;
+    this.subject = msg.subject;
+    this.reply = msg.reply;
+    this.data = msg.data;
+    this.headers = msg.headers;
+    this.respond = msg.respond;
+    this.json = this.jc.decode(msg.data);
+  }
 }
 
 export interface NatsEvents {
-  onNatsConnected?: (client?: Nats.Client) => void;
+  onNatsConnected?: (client?: NatsConnection) => void;
 }
 
 /**
@@ -15,8 +32,7 @@ export interface NatsEvents {
 export interface SubjectConfig {
   hooks?: string[];
   dataQuota?: number;
-  payload?: Nats.Payload;
-  options?: Nats.SubscriptionOptions;
+  options?: SubscriptionOptions;
   meta?: any;
 }
 
@@ -42,18 +58,19 @@ export function SUBJECT(subject: string, config: SubjectConfig = {}) {
       options: config.options || {},
       hooks: config.hooks || [],
       dataQuota: config.dataQuota || 1024 * 100,
-      payload: config.payload || Nats.Payload.JSON,
       key
     }
   };
 }
 
+connect()
+
 export class MicroNats extends MicroPlugin {
-  private _subs = new Map<string, Nats.Subscription>();
-  private _client: Nats.Client;
+  private _subs = new Map<string, Subscription>();
+  private _client: NatsConnection;
   healthy = true;
 
-  constructor(private _conf: string | number | Nats.NatsConnectionOptions = "localhost:4222") {
+  constructor(private _conf: ConnectionOptions = { servers: "localhost:4222" }) {
     super();
   }
 
@@ -62,7 +79,7 @@ export class MicroNats extends MicroPlugin {
 
   async init() {
     Micro.logger.info('initializing nats server connection');
-    this._client = await Nats.connect(this._conf);
+    this._client = await connect(this._conf);
     Micro.logger.info('connected to nats server successfully');
 
     if (typeof Micro.service.onNatsConnected === "function")
@@ -76,16 +93,19 @@ export class MicroNats extends MicroPlugin {
       let subjectConf = serviceSubjects[subject];
       let currentService = Micro.getCurrentService(subjectConf.service) || Micro.service;
 
-      if (typeof Micro.service[subjectConf.key] !== "function") continue;
+      if (typeof Micro.service[subjectConf.key] !== "function")
+        continue;
 
       Micro.logger.info('subscribing to subject: ' + subject);
-      let sub = await this._client.subscribe(subject, async (err, msg) => {
-        Micro.logger.info(`subject called: ${subject}`);
+      let sub = await this._client.subscribe(subject, subjectConf.options);
 
-        if (err) return Micro.logger.error(err, `subject: ${subject}, method: ${subjectConf.key}`);
+      for await (let msg of sub) {
+        Micro.logger.info(`subject called: ${msg.subject}`);
+        let natsMsg = new NatsMsg(msg);
 
-        if (subjectConf.dataQuota && subjectConf.dataQuota < msg.size) {
-          if (msg.reply) this._client.publish(msg.reply, 'msg body quota exceeded');
+        // TODO: Check for msg error
+        if (subjectConf.dataQuota && subjectConf.dataQuota < sub.getProcessed()) {
+          msg.respond(natsMsg.jc.encode('msg body quota exceeded'));
           return Micro.logger.warn('msg body quota exceeded');
         }
 
@@ -96,32 +116,53 @@ export class MicroNats extends MicroPlugin {
             for (let hook of subjectConf.hooks) {
               currHook = hook;
 
-              if (currentService[hook] === undefined && Micro.service[hook] === undefined) return Micro.logger.warn(`Hook not found: ${hook}!`);
-              else if (typeof currentService[hook] !== 'function' && typeof Micro.service[hook] !== 'function') return Micro.logger.warn(`invalid hook type: ${hook}!`);
+              if (currentService[hook] === undefined && Micro.service[hook] === undefined) {
+                natsMsg.respond(natsMsg.jc.encode({ error: { msg: 'hook unhandled error' + currHook } }));
+                return Micro.logger.warn(`Hook not found: ${hook}!`);
 
-              let ret = currentService[hook] ? currentService[hook](this._client, msg, subjectConf.key, subjectConf.meta) : Micro.service[hook](this._client, msg, subjectConf.key, subjectConf.meta);
+              } else if (typeof currentService[hook] !== 'function' && typeof Micro.service[hook] !== 'function') {
+                natsMsg.respond(natsMsg.jc.encode({ error: { msg: 'hook unhandled error' + currHook } }));
+                return Micro.logger.warn(`invalid hook type: ${hook}!`);
+              }
+
+              let ret = currentService[hook]
+                ? currentService[hook](this._client, natsMsg, subjectConf.key, subjectConf.meta)
+                : Micro.service[hook](this._client, natsMsg, subjectConf.key, subjectConf.meta);
+
               if (ret) {
                 if (typeof ret.then === "function") {
                   let passed = await ret;
 
-                  if (!passed) return Micro.logger.info(`subject ${msg.subject} ended from hook: ${hook}`);
+                  if (!passed) {
+                    natsMsg.respond(natsMsg.jc.encode({ error: { msg: 'blocked by hook: ' + currHook } }));
+                    return Micro.logger.info(`subject ${msg.subject} blocked by hook: ${hook}`);
+                  }
                 }
 
-              } else return Micro.logger.info(`subject ${msg.subject} ended from hook: ${hook}`);
+              } else {
+                natsMsg.respond(natsMsg.jc.encode({ error: { msg: 'blocked by hook: ' + currHook } }));
+                return Micro.logger.info(`subject ${msg.subject} blocked by hook: ${hook}`);
+              }
             }
           } catch (e) {
-            if (msg.reply) this, this._client.publish(msg.reply, { error: { msg: 'hook unhandled error' + currHook } });
+            natsMsg.respond(natsMsg.jc.encode({ error: { msg: 'hook unhandled error' + currHook } }));
             return Micro.logger.error(e);
           }
         }
 
         try {
-          let ret = currentService[subjectConf.key](this._client, msg, subjectConf.meta);
-          if (ret && typeof ret.then === "function") await ret;
-          Micro.logger.info(`subject ${msg.subject} ended`);
-        } catch (e) { Micro.logger.error(e, `subject: ${subject}, method: ${subjectConf.key}`); }
+          let ret = currentService[subjectConf.key](this._client, natsMsg, subjectConf.meta);
 
-      }, subjectConf.options);
+          if (ret && typeof ret.then === "function")
+            await ret;
+
+          Micro.logger.info(`subject ${msg.subject} ended`);
+
+        } catch (e) {
+          natsMsg.respond(natsMsg.jc.encode({ error: { msg: 'unknownError' } }));
+          Micro.logger.error(e, `subject: ${subject}, method: ${subjectConf.key}`);
+        }
+      }
 
       this._subs.set(subject, sub);
     }
