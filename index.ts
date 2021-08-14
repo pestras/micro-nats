@@ -91,8 +91,8 @@ async function manageSubscrption(sub: Subscription, config: SubjectFullConfig, s
           }
 
           let ret = service[hook]
-            ? service[hook](this._client, natsMsg, config.key, config.meta)
-            : Micro.service[hook](this._client, natsMsg, config.key, config.meta);
+            ? service[hook](natsMsg, this._client, config.key, config.meta)
+            : Micro.service[hook](natsMsg, this._client, config.key, config.meta);
 
           if (ret) {
             if (typeof ret.then === "function") {
@@ -116,7 +116,7 @@ async function manageSubscrption(sub: Subscription, config: SubjectFullConfig, s
     }
 
     try {
-      let ret = service[config.key](this._client, natsMsg, config.meta);
+      let ret = service[config.key](natsMsg, this._client, config.meta);
 
       if (ret && typeof ret.then === "function")
         await ret;
