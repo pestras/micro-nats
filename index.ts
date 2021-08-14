@@ -63,6 +63,73 @@ export function SUBJECT(subject: string, config: SubjectConfig = {}) {
   };
 }
 
+async function manageSubscrption(sub: Subscription, config: SubjectFullConfig, service: any) {
+  for await (let msg of sub) {
+    Micro.logger.info(`subject called: ${msg.subject}`);
+    let natsMsg = new NatsMsg(msg);
+
+    // TODO: Check for msg error
+    if (config.dataQuota && config.dataQuota < sub.getProcessed()) {
+      msg.respond(natsMsg.jc.encode('msg body quota exceeded'));
+      return Micro.logger.warn('msg body quota exceeded');
+    }
+
+    if (config.hooks && config.hooks.length > 0) {
+      let currHook: string;
+
+      try {
+        for (let hook of config.hooks) {
+          currHook = hook;
+
+          if (service[hook] === undefined && Micro.service[hook] === undefined) {
+            natsMsg.respond(natsMsg.jc.encode({ error: { msg: 'hook unhandled error' + currHook } }));
+            return Micro.logger.warn(`Hook not found: ${hook}!`);
+
+          } else if (typeof service[hook] !== 'function' && typeof Micro.service[hook] !== 'function') {
+            natsMsg.respond(natsMsg.jc.encode({ error: { msg: 'hook unhandled error' + currHook } }));
+            return Micro.logger.warn(`invalid hook type: ${hook}!`);
+          }
+
+          let ret = service[hook]
+            ? service[hook](this._client, natsMsg, config.key, config.meta)
+            : Micro.service[hook](this._client, natsMsg, config.key, config.meta);
+
+          if (ret) {
+            if (typeof ret.then === "function") {
+              let passed = await ret;
+
+              if (!passed) {
+                natsMsg.respond(natsMsg.jc.encode({ error: { msg: 'blocked by hook: ' + currHook } }));
+                return Micro.logger.info(`subject ${msg.subject} blocked by hook: ${hook}`);
+              }
+            }
+
+          } else {
+            natsMsg.respond(natsMsg.jc.encode({ error: { msg: 'blocked by hook: ' + currHook } }));
+            return Micro.logger.info(`subject ${msg.subject} blocked by hook: ${hook}`);
+          }
+        }
+      } catch (e) {
+        natsMsg.respond(natsMsg.jc.encode({ error: { msg: 'hook unhandled error' + currHook } }));
+        return Micro.logger.error(e);
+      }
+    }
+
+    try {
+      let ret = service[config.key](this._client, natsMsg, config.meta);
+
+      if (ret && typeof ret.then === "function")
+        await ret;
+
+      Micro.logger.info(`subject ${msg.subject} ended`);
+
+    } catch (e) {
+      natsMsg.respond(natsMsg.jc.encode({ error: { msg: 'unknownError' } }));
+      Micro.logger.error(e, `subject: ${msg.subject}, method: ${config.key}`);
+    }
+  }
+}
+
 export class MicroNats extends MicroPlugin {
   private _subs = new Map<string, Subscription>();
   private _client: NatsConnection;
@@ -99,74 +166,9 @@ export class MicroNats extends MicroPlugin {
         continue;
 
       Micro.logger.info('subscribing to subject: ' + subject);
-      let sub = await this._client.subscribe(subject, subjectConf.options);
+      this._subs.set(subject, this._client.subscribe(subject, subjectConf.options));
 
-      for await (let msg of sub) {
-        Micro.logger.info(`subject called: ${msg.subject}`);
-        let natsMsg = new NatsMsg(msg);
-
-        // TODO: Check for msg error
-        if (subjectConf.dataQuota && subjectConf.dataQuota < sub.getProcessed()) {
-          msg.respond(natsMsg.jc.encode('msg body quota exceeded'));
-          return Micro.logger.warn('msg body quota exceeded');
-        }
-
-        if (subjectConf.hooks && subjectConf.hooks.length > 0) {
-          let currHook: string;
-
-          try {
-            for (let hook of subjectConf.hooks) {
-              currHook = hook;
-
-              if (currentService[hook] === undefined && Micro.service[hook] === undefined) {
-                natsMsg.respond(natsMsg.jc.encode({ error: { msg: 'hook unhandled error' + currHook } }));
-                return Micro.logger.warn(`Hook not found: ${hook}!`);
-
-              } else if (typeof currentService[hook] !== 'function' && typeof Micro.service[hook] !== 'function') {
-                natsMsg.respond(natsMsg.jc.encode({ error: { msg: 'hook unhandled error' + currHook } }));
-                return Micro.logger.warn(`invalid hook type: ${hook}!`);
-              }
-
-              let ret = currentService[hook]
-                ? currentService[hook](this._client, natsMsg, subjectConf.key, subjectConf.meta)
-                : Micro.service[hook](this._client, natsMsg, subjectConf.key, subjectConf.meta);
-
-              if (ret) {
-                if (typeof ret.then === "function") {
-                  let passed = await ret;
-
-                  if (!passed) {
-                    natsMsg.respond(natsMsg.jc.encode({ error: { msg: 'blocked by hook: ' + currHook } }));
-                    return Micro.logger.info(`subject ${msg.subject} blocked by hook: ${hook}`);
-                  }
-                }
-
-              } else {
-                natsMsg.respond(natsMsg.jc.encode({ error: { msg: 'blocked by hook: ' + currHook } }));
-                return Micro.logger.info(`subject ${msg.subject} blocked by hook: ${hook}`);
-              }
-            }
-          } catch (e) {
-            natsMsg.respond(natsMsg.jc.encode({ error: { msg: 'hook unhandled error' + currHook } }));
-            return Micro.logger.error(e);
-          }
-        }
-
-        try {
-          let ret = currentService[subjectConf.key](this._client, natsMsg, subjectConf.meta);
-
-          if (ret && typeof ret.then === "function")
-            await ret;
-
-          Micro.logger.info(`subject ${msg.subject} ended`);
-
-        } catch (e) {
-          natsMsg.respond(natsMsg.jc.encode({ error: { msg: 'unknownError' } }));
-          Micro.logger.error(e, `subject: ${subject}, method: ${subjectConf.key}`);
-        }
-      }
-
-      this._subs.set(subject, sub);
+      manageSubscrption(this._subs.get(subject), subjectConf, currentService);
     }
 
     this.ready = true;

@@ -1,13 +1,10 @@
 {
   "name": "@pestras/micro-nats",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "pestras microservice plugin for nats messaging server support",
   "main": "index.js",
   "types": "index.ts",
-  "scripts": {
-    "test": "test",
-    "tsc": "tsc"
-  },
+  "scripts": {},
   "repository": {
     "type": "git",
     "url": "git+https://github.com/pestras/micro-nats.git"
