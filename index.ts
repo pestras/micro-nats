@@ -131,12 +131,24 @@ async function manageSubscrption(sub: Subscription, config: SubjectFullConfig, s
 }
 
 export class MicroNats extends MicroPlugin {
+  private static _instance: MicroNats;
+
   private _subs = new Map<string, Subscription>();
   private _client: NatsConnection;
+
   healthy = true;
 
   constructor(private _conf: ConnectionOptions = { servers: "localhost:4222" }) {
     super();
+
+    if (MicroNats._instance)
+      return MicroNats._instance;
+
+    MicroNats._instance = this;
+  }
+
+  static get Client() {
+    return MicroNats._instance?.client;
   }
 
   get client() { return this._client; }
