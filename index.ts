@@ -219,7 +219,7 @@ export class MicroNats extends MicroPlugin {
     return new NatsMsg<T>(res);
   }
 
-  static Publish(subject: string, data?: Uint8Array, options?: PublishOptions) {
+  static Publish(subject: string, data?: any, options?: PublishOptions) {
     if (!MicroNats.Client)
       throw Error('MicroNats is not connected');
 
