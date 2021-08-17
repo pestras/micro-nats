@@ -182,7 +182,7 @@ export class MicroNats extends MicroPlugin {
       let subjectConf = serviceSubjects[subject];
       let currentService = Micro.getCurrentService(subjectConf.service) || Micro.service;
 
-      if (typeof Micro.service[subjectConf.key] !== "function")
+      if (typeof currentService[subjectConf.key] !== "function")
         continue;
 
       Micro.logger.info('subscribing to subject: ' + subject);
@@ -217,5 +217,12 @@ export class MicroNats extends MicroPlugin {
 
     let res = await MicroNats.Client.request(subject, data ? MicroNats.Encode(data) : undefined, opts);
     return new NatsMsg<T>(res);
+  }
+
+  static Publish(subject: string, data?: Uint8Array, options?: PublishOptions) {
+    if (!MicroNats.Client)
+      throw Error('MicroNats is not connected');
+
+    MicroNats.Client.publish(subject, data ? MicroNats.Encode(data) : undefined, options);
   }
 }
