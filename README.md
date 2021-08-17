@@ -8,12 +8,6 @@ Pestras microservice plugin for nats messaging server support.
 npm i @pestras/micro @pestras/micro-nats
 ```
 
-## Template
-
-```bash
-$ git clone https://github.com/pestras/pestras-micro-template
-```
-
 ## Plug In
 
 ```ts

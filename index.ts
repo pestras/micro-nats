@@ -1,15 +1,22 @@
 import { Micro, MicroPlugin } from '@pestras/micro';
 import { connect, ConnectionOptions, NatsConnection, Msg, JSONCodec, SubscriptionOptions, Subscription, MsgHdrs, PublishOptions, RequestOptions } from 'nats';
 
+export class MsgError extends Error {
+  constructor(msg: string, public code = 0) {
+    super(msg);
+  }
+}
+
 export class NatsMsg<T = any> implements Msg {
+  readonly _respond: (data?: Uint8Array, opts?: PublishOptions) => boolean;
+
   public readonly jc = JSONCodec<T>();
   readonly sid: number;
   readonly subject: string;
   readonly reply: string;
   readonly data: Uint8Array;
   readonly headers: MsgHdrs;
-  readonly respond: (data?: Uint8Array, opts?: PublishOptions) => boolean;
-  json: T & { error?: Error };
+  json: T & { error?: MsgError };
 
   constructor(msg: Msg) {
     this.sid = msg.sid;
@@ -17,8 +24,12 @@ export class NatsMsg<T = any> implements Msg {
     this.reply = msg.reply;
     this.data = msg.data;
     this.headers = msg.headers;
-    this.respond = msg.respond;
+    this._respond = msg.respond;
     this.json = this.jc.decode(msg.data);
+  }
+
+  respond(data: any, opts?: PublishOptions): boolean {
+    return this._respond(MicroNats.Encode(data), opts);
   }
 }
 
