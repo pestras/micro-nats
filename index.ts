@@ -1,5 +1,5 @@
 import { Micro, MicroPlugin } from '@pestras/micro';
-import { connect, ConnectionOptions, NatsConnection, Msg, JSONCodec, SubscriptionOptions, Subscription, MsgHdrs, PublishOptions } from 'nats';
+import { connect, ConnectionOptions, NatsConnection, Msg, JSONCodec, SubscriptionOptions, Subscription, MsgHdrs, PublishOptions, RequestOptions } from 'nats';
 
 export class NatsMsg<T = any> implements Msg {
   public readonly jc = JSONCodec<T>();
@@ -9,7 +9,7 @@ export class NatsMsg<T = any> implements Msg {
   readonly data: Uint8Array;
   readonly headers: MsgHdrs;
   readonly respond: (data?: Uint8Array, opts?: PublishOptions) => boolean;
-  json: T;
+  json: T & { error?: Error };
 
   constructor(msg: Msg) {
     this.sid = msg.sid;
@@ -132,6 +132,7 @@ async function manageSubscrption(sub: Subscription, config: SubjectFullConfig, s
 
 export class MicroNats extends MicroPlugin {
   private static _instance: MicroNats;
+  private static _jsonCodec = JSONCodec();
 
   private _subs = new Map<string, Subscription>();
   private _client: NatsConnection;
@@ -145,10 +146,6 @@ export class MicroNats extends MicroPlugin {
       return MicroNats._instance;
 
     MicroNats._instance = this;
-  }
-
-  static get Client() {
-    return MicroNats._instance?.client;
   }
 
   get client() { return this._client; }
@@ -185,5 +182,29 @@ export class MicroNats extends MicroPlugin {
 
     this.ready = true;
     this.live = true;
+  }
+
+  static get Client() {
+    return MicroNats._instance?.client;
+  }
+
+  static get Subscriptions() {
+    return MicroNats._instance?.subs;
+  }
+
+  static Encode(data: any) {
+    return MicroNats._jsonCodec.encode(data);
+  }
+
+  static Decode<T = any>(data: Uint8Array) {
+    return MicroNats._jsonCodec.decode(data) as T;
+  }
+
+  static async Request<T = any>(subject: string, data?: any, opts?: RequestOptions): Promise<NatsMsg<T>> {
+    if (!MicroNats.Client)
+      throw Error('MicroNats is not connected');
+
+    let res = await MicroNats.Client.request(subject, data ? MicroNats.Encode(data) : undefined, opts);
+    return new NatsMsg<T>(res);
   }
 }
