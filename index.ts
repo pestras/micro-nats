@@ -8,28 +8,22 @@ export class MsgError extends Error {
 }
 
 export class NatsMsg<T = any> implements Msg {
-  readonly _respond: (data?: Uint8Array, opts?: PublishOptions) => boolean;
 
   public readonly jc = JSONCodec<T>();
-  readonly sid: number;
-  readonly subject: string;
-  readonly reply: string;
-  readonly data: Uint8Array;
-  readonly headers: MsgHdrs;
   json: T & { error?: MsgError };
 
-  constructor(msg: Msg) {
-    this.sid = msg.sid;
-    this.subject = msg.subject;
-    this.reply = msg.reply;
-    this.data = msg.data;
-    this.headers = msg.headers;
-    this._respond = msg.respond;
+  constructor(private msg: Msg) {
     this.json = this.jc.decode(msg.data);
   }
 
+  get sid() { return this.msg.sid; }
+  get subject() { return this.msg.subject; }
+  get reply() { return this.msg.reply; }
+  get data() { return this.msg.data; }
+  get headers() { return this.msg.headers; }
+
   respond(data: any, opts?: PublishOptions): boolean {
-    return this._respond(MicroNats.Encode(data), opts);
+    return this.msg.respond(MicroNats.Encode(data), opts);
   }
 }
 
@@ -135,7 +129,7 @@ async function manageSubscrption(sub: Subscription, config: SubjectFullConfig, s
       Micro.logger.info(`subject ${msg.subject} ended`);
 
     } catch (e) {
-      natsMsg.respond(natsMsg.jc.encode({ error: { msg: 'unknownError' } }));
+      natsMsg.respond({ error: { msg: 'unknownError' } });
       Micro.logger.error(e, `subject: ${msg.subject}, method: ${config.key}`);
     }
   }
