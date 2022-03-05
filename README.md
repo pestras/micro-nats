@@ -14,7 +14,7 @@ npm i @pestras/micro @pestras/micro-nats
 import { SERVICE, Micro } from '@pestras/micro';
 import { MicroNats } from '@pestras/micro-nats';
 
-Micro.plugin(new MicroNats());
+Micro.plugins(new MicroNats());
 
 @SERVICE()
 class test {}
@@ -45,7 +45,7 @@ import { SERVICE, Micro } from '@pestras/micro';
 import { SUBJECT, NatsMsg } from '@pestras/micro-nats';
 import { Client, Payload} from 'ts-nats';
 
-Micro.plugin(new MicroNats());
+Micro.plugins(new MicroNats());
 
 @SERVICE({ workers: 3 })
 class Email {
@@ -81,7 +81,7 @@ import { SERVICE, Micro } from '@pestras/micro';
 import { SUBJECT, NatsMsg } from '@pestras/micro-nats';
 import { Client, Payload} from 'ts-nats';
 
-Micro.plugin(new MicroNats());
+Micro.plugins(new MicroNats());
 
 interface MsgInput { id: string; email: string }
 
@@ -129,7 +129,7 @@ import { Micro, SERVICE } from '@pestras/micro';
 import { SUBJECT, NATS_HOOK } from '@pestras/micro-nats';
 import { Client, Payload} from 'ts-nats';
 
-Micro.plugin(new MicroNats());
+Micro.plugins(new MicroNats());
 
 @SERVICE()
 class Articles {
@@ -173,7 +173,7 @@ import { SERVICE, Micro } from '@pestras/micro';
 import { SUBJECT, NatsMsg, NatsEvents } from '@pestras/micro-nats';
 import { Client, Payload} from 'ts-nats';
 
-Micro.plugin(new MicroNats());
+Micro.plugins(new MicroNats());
 
 interface MsgInput { id: string; email: string }
 
