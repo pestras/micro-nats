@@ -12,7 +12,7 @@ npm i @pestras/micro @pestras/micro-nats
 
 ```ts
 import { SERVICE, Micro } from '@pestras/micro';
-import { MicroNats } from '@pestras/micro-nats;
+import { MicroNats } from '@pestras/micro-nats';
 
 Micro.plugin(new MicroNats());
 
@@ -26,7 +26,7 @@ Micro.start(Test);
 
 Name        | Type     | Default         | Description
 ----        | -----    | ------          | -----
-connection  | string \| number \| NatsConnectionOptions | 'localhost:42222' | see [Nats Docs](https://docs.nats.io/)
+connection  | string \| number \| NatsConnectionOptions | 'localhost:4222' | see [Nats Docs](https://docs.nats.io/)
 
 ## SUBJECT DECORATOR
 

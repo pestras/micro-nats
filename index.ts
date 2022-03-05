@@ -1,5 +1,5 @@
 import { Micro, MicroPlugin } from '@pestras/micro';
-import { connect, ConnectionOptions, NatsConnection, Msg, JSONCodec, SubscriptionOptions, Subscription, MsgHdrs, PublishOptions, RequestOptions } from 'nats';
+import { connect, ConnectionOptions, NatsConnection, Msg, JSONCodec, SubscriptionOptions, Subscription, PublishOptions, RequestOptions } from 'nats';
 
 export class MsgError extends Error {
   constructor(msg: string, public code = 0) {
@@ -80,18 +80,18 @@ async function manageSubscrption(sub: Subscription, config: SubjectFullConfig, s
     }
 
     if (config.hooks && config.hooks.length > 0) {
-      let currHook: string;
+      let currHook = '';
 
       try {
         for (let hook of config.hooks) {
           currHook = hook;
 
           if (service[hook] === undefined && Micro.service[hook] === undefined) {
-            natsMsg.respond(natsMsg.jc.encode({ error: { msg: 'hook unhandled error' + currHook } }));
+            natsMsg.respond(natsMsg.jc.encode({ error: { message: 'hook unhandled error' + currHook } }));
             return Micro.logger.warn(`Hook not found: ${hook}!`);
 
           } else if (typeof service[hook] !== 'function' && typeof Micro.service[hook] !== 'function') {
-            natsMsg.respond(natsMsg.jc.encode({ error: { msg: 'hook unhandled error' + currHook } }));
+            natsMsg.respond(natsMsg.jc.encode({ error: { message: 'hook unhandled error' + currHook } }));
             return Micro.logger.warn(`invalid hook type: ${hook}!`);
           }
 
@@ -104,18 +104,18 @@ async function manageSubscrption(sub: Subscription, config: SubjectFullConfig, s
               let passed = await ret;
 
               if (!passed) {
-                natsMsg.respond(natsMsg.jc.encode({ error: { msg: 'blocked by hook: ' + currHook } }));
+                natsMsg.respond(natsMsg.jc.encode({ error: { message: 'blocked by hook: ' + currHook } }));
                 return Micro.logger.info(`subject ${msg.subject} blocked by hook: ${hook}`);
               }
             }
 
           } else {
-            natsMsg.respond(natsMsg.jc.encode({ error: { msg: 'blocked by hook: ' + currHook } }));
+            natsMsg.respond(natsMsg.jc.encode({ error: { message: 'blocked by hook: ' + currHook } }));
             return Micro.logger.info(`subject ${msg.subject} blocked by hook: ${hook}`);
           }
         }
-      } catch (e) {
-        natsMsg.respond(natsMsg.jc.encode({ error: { msg: 'hook unhandled error' + currHook } }));
+      } catch (e: any) {
+        natsMsg.respond(natsMsg.jc.encode({ error: { message: 'hook unhandled error' + currHook } }));
         return Micro.logger.error(e);
       }
     }
@@ -128,8 +128,8 @@ async function manageSubscrption(sub: Subscription, config: SubjectFullConfig, s
 
       Micro.logger.info(`subject ${msg.subject} ended`);
 
-    } catch (e) {
-      natsMsg.respond({ error: { msg: 'unknownError' } });
+    } catch (e: any) {
+      natsMsg.respond({ error: { message: 'unknownError' } });
       Micro.logger.error(e, `subject: ${msg.subject}, method: ${config.key}`);
     }
   }
@@ -144,7 +144,7 @@ export class MicroNats extends MicroPlugin {
 
   healthy = true;
 
-  constructor(private _conf: ConnectionOptions = { servers: "localhost:4222" }) {
+  constructor(private _conf: ConnectionOptions | string = { servers: "localhost:4222" }) {
     super();
 
     if (MicroNats._instance)
@@ -162,7 +162,7 @@ export class MicroNats extends MicroPlugin {
 
   async init() {
     Micro.logger.info('initializing nats server connection');
-    this._client = await connect(this._conf);
+    this._client = await connect(typeof this._conf === 'string' ? { servers: this._conf } : this._conf);
     Micro.logger.info('connected to nats server successfully');
 
     if (typeof Micro.service.onNatsConnected === "function")
